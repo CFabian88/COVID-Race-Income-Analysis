@@ -1,0 +1,67 @@
+---
+title: 'NaiveBayes: Analysis of Race on COVID-19 Conditional Death Probabilities'
+author: "Collin Fabian"
+date: "3/21/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('/Users/fabian_coll/Desktop/PyProjects/COVID-Race-Income-Analysis/naiveBayes')
+```
+
+We must first load in our data
+```{r}
+library(e1071)
+patient_df <- read.csv('patient_cases_by_race.csv')
+```
+
+```{r}
+patient_df$hosp_yn <- factor(patient_df$hosp_yn)
+head(patient_df, n = 10)
+```
+
+```{r}
+train.index <- sample(c(1:dim(patient_df)[1]), dim(patient_df)[1]*0.6)  
+train.df <- patient_df[train.index, ]
+valid.df <- patient_df[-train.index, ]
+```
+
+Now, we can use the Naive Bayes Classifier for Discrete Predictors to calculate the probability of death based on race.
+```{r}
+race.nb <- naiveBayes(Race ~ death_yn, data = train.df)
+race.nb$tables$death_yn
+```
+As we can see, the Races ranked in order from highest percentage of death to lowest is:\
+  1. AmericanIndian/NativeIslander\
+  2. Black\
+  3. White\
+  4. Asian\
+  5. Other\
+  6. NativeHawaiian/PacificIslander\
+  7. Hispanic\
+ \
+ 
+```{r}
+
+```
+Now, lets use Naive Bayes again to get P(Hosp_yn | Race & death_yn = Yes). This will tell us the probability that a patient who died had access to a hospital given their Race.
+```{r}
+race.nb2 <- naiveBayes(Race ~ hosp_yn, data = subset(train.df, death_yn=='Yes'))
+race.nb2$tables$hosp_yn
+```
+From our results, out of all the patients who died from COVID-19, the probabilities of getting treatment at a hospital based on Race are listed in order from lowest to highest:\
+  1. White\
+  2. Other\
+  3. AmericanIndian/NativeIslander\
+  4. NativeHawaiian/PacificIslander\
+  5. Hispanic\
+  6. Black\
+  7. Asian\
+  
+  
+
+
+
+
+

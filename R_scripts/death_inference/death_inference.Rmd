@@ -1,0 +1,176 @@
+---
+title: "Lab 7: Inference for a completely randomized factorial experiment"
+author: "Collin Fabian"
+date: "3/23/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('/Users/fabian_coll/Desktop/PyProjects/COVID-Race-Income-Analysis/R_scripts/death_inference')
+library(mosaic)
+library(ggpubr)
+library(emmeans)
+library(agricolae)
+```
+
+Load Data:
+```{r}
+setwd('/Users/fabian_coll/Desktop/PyProjects/COVID-Race-Income-Analysis/data/clean')
+df.main = read.csv('COVID_deaths.csv')
+```
+
+Since we know that the assumptions for ANOVA will not be met with outliers present in our data, we must identify our outliers and remove them from the dataset.
+```{r}
+outliers <- boxplot(df.main$Total_deaths_per100k, plot=FALSE)$out
+df.main <- df.main[-which(df.main$Total_deaths_per100k %in% outliers),]
+```
+Since our scatter plot of residuals appears to be random with no patterns, and the histogram of residuals appears approximately normal, we can conclude that the assumptions of ANOVA are being met with our model.\
+ \
+
+### Exploratory Data Analysis\
+First lets look at some basic summary statistics of our variables. We will use the *favstats* function from the `r mosaic` package.
+```{r}
+favstats(
+  Total_deaths_per100k ~ County_majority + median_income_quartile, 
+  data = df.main)
+```
+As we can see, the top 5 interactions ranked from largest to smallest median value are:\
+1. White: Low\
+2. Other: Low\
+3. AmericanIndian/NativeIslander: Low\
+4. Black: Low\
+5. White: MidLow\
+ \
+We can further visualize these statistics with boxplots.
+```{r, fig.height = 5, fig.width = 10}
+par(mar = c(3.1, 7.1, 1.1, 1.5)) # change the plot margins to make things easier to read
+boxplot(Total_deaths_per100k ~ County_majority + median_income_quartile, 
+        data = df.main, 
+        horizontal = T, 
+        las = 2, 
+        ylab = "", 
+        cex.axis = 0.9)
+```
+Looking at our results, it would appear that the both median_income_quartile and County_majority have different treatment effects. This is due to the fact that when we compare plots based on a common 'median_income_quantile', we can see that the 7 boxplots are not same across our different races. Also, when we compare plots based on a common 'County_majority', we can see that the 4 boxplots are not the same across the income levels. For instance, when looking at all of the counties where the racial majority is White, we can see that 'White: Low', 'White: MidLow' and 'White: MidHigh' are similar, but 'White: High' is very different. Also, when we look at all of the plots for interactions involving counties considered 'High' income, we can see that the plots for interactions 'PacificIslander: High', 'Hispanic: High' and 'Asian: High' are similar, but the plots for interactions 'White: High', 'Other: High', 'Black: High' and 'NativeIslander: High' are all very different.
+ \
+ 
+### Analysis as a Factorial Design\
+For this analysis, we will be analyzing both a county's racial majority and median income level as our treatment factors. Since these factors have 7 and 4 levels respectively, we will have a total of 28 treatment combinations.
+```{r}
+additive.mod = aov(Total_deaths_per100k ~ County_majority + median_income_quartile, data = df.main)
+summary(additive.mod)
+```
+Since both of the omnibus F-tests are significant, we can conclude that there is a significant main effect of both 'median_income_quartile' and 'County_majority'.\
+ \
+
+### Interaction Effects\
+Now we will see if our two treatment effects ('median_income_quartile' and 'County_majority') interact to affect the average number of deaths per 100k. We can get an initial visualization of their relationships with the outcome variable with the following:
+```{r, fig.height=5, fig.width = 10}
+library(ggpubr)
+par(mfrow = c(1, 2))
+g1 = ggline(df.main, 
+            x = "median_income_quartile", 
+            y = "Total_deaths_per100k", 
+            color = "County_majority", 
+            add = c("mean"), 
+            lwd = 2) + 
+  ylab("Total_deaths_per100k") + 
+  xlab("")
+
+g2 = ggline(df.main, 
+            x = "County_majority", 
+            y = "Total_deaths_per100k", 
+            color = "median_income_quartile",
+            add = c("mean"),
+            lwd= 2 ) + 
+  ylab("Total_deaths_per100k") + 
+  xlab("") + 
+  scale_x_discrete(guide = guide_axis(angle = 60))
+
+#out = ggarrange(g1, g2, nrow=1, labels="")
+g1
+g2
+```
+Based on our results, we can expect there to be little to no difference in effect on the average total number of deaths per 100k between the following pairs of interactions:\
+1. 'AmericanIndian/NativeIslander: MidLow' & 'AmericanIndian/NativeIslander: MidHigh'\
+2. 'Black: MidHigh' & 'Black: High'\
+3. 'Hispanic: Low' & 'Hispanic: MidLow'\
+4. 'Other: MidLow' & 'Other: MidHigh'
+ \
+In order to be sure of our results, we must do a two-way ANOVA like when we tested for main effects. Instead, this time we will not add both treatment effects alone; but instead, will use the two treatment effects as an interaction term for our model.
+```{r}
+interact.mod = aov(Total_deaths_per100k ~ County_majority * median_income_quartile, data = df.main)
+summary(interact.mod)
+```
+Since all of the omnibus F-tests were significant, including the one for the interaction between our two treatment effects, we can conclude that 'median_income_quartile' and 'County_majority' interact to affect the liklihood of a patient surviving or not.\
+ \
+In order to see if it is worth using our Interaction Model as opposed to our Main Effects model, we can use a standard ANOVA to test the validity of our Interaction Model compared to our Main Effects Model.
+```{r}
+anova(additive.mod, interact.mod)
+```
+Since the omnibus F-test between our two models was significant, we can assume that our interaction model is better than our main effects model when it comes to predicting a county's total number of total deaths per 100k given that county's racial majority and median income level.\
+ \
+
+### Post-hoc analysis\
+Now that we have our ideal model, we must measure to what degree these treatment effects have an impact in influencing the results of our response variable. We can measure this by calculating the estimated marginal means (EMMs).
+```{r}
+emmeans(interact.mod, "County_majority")
+emmeans(interact.mod, "median_income_quartile")
+```
+These results allow us to see which treatment levels are the most different. The order of levels of our treatment effects are listed from largest to smallest below. What we can gather from these results is that the higher the rank a particular race or income level is, the more that treatment level increases the average number of total deaths per 100k.\
+**County_majority**\
+1. Other\
+2. AmericanIndian/NativeIslander\
+3. White\
+4. Black\
+5. Hispanic\
+6. NativeHawaiian/PacificIslander\
+7. Asian
+**median_income_quartile**\
+1. Low\
+2. MidLow\
+3. MidHigh\
+4. High\
+ \
+
+Now we must test how significant these differences in EMMs are, we can use a standard post-hoc analysis. For this instance, we will use the Tukey HSD method for testing pairwise comparisons.\
+Lets start with examining the main effects for both of our treatment factors.
+```{r}
+TukeyHSD(interact.mod, which = c("County_majority", "median_income_quartile"), ordered = T)
+```
+As we can see, the following differences between treatment levels were significant.\
+**County Majority**\
+1. White - Asian\
+2. White - NativeHawaiian/PacificIslander\
+3. White - Hispanic\
+4. White - Black\
+5. AmericanIndian/NativeIslander - NativeHawaiian/PacificIslander\
+6. AmericanIndian/NativeIslander - Asian\
+7. AmericanIndian/NativeIslander - Hispanic\
+**Median Income Quartile**\
+1. 2nd - 4th\
+2. 1st - 4th\
+3. 1st - 3rd\
+4. 1st - 2nd\
+ \
+Now we must test the significance of the interaction effects of our treatment effects. In total we have 7C4 = 35 possible combinations, so we will use the 'HSD.test' function. This produces the same test as the 'TukeyHSD' function, but provides a cleaner output format. We must note that not all combinations will be tested due to the fact that their sample size is too small.
+```{r}
+HSD.test(interact.mod, c("County_majority","median_income_quartile"), console=T)
+```
+Our winner for highest Total_deaths_per100k goes to the interaction 'Abstract: medium.' This means that this combination of treatment effects produces the highest average website Total_deaths_per100k. Also, we can see that interactions 'Plain: large', 'Nature: large' and 'Abstract: small' all share the same group (group 'a') with 'Abstract: medium'. This means that the difference between interaction 'Abstract: medium' and all the other 3 interactions in group 'a' are NOT significant. What we can take away from these results is that for nature and plain County_majoritys, a large median_income_quartile size is the best option. However, for abstract County_majoritys, a large median_income_quartile would be the worst possible option because the interaction 'Abstract: large' has the lowest Total_deaths_per100k of the three 'Abstract' combinations.\
+ \
+
+```{r}
+best.mod = update(interact.mod, ~ . - median_income_quartile:County_majority)
+summary(best.mod)
+```
+Notice how we do not remove the non-significant main treatment effect 'textcolor' because it is still influential in our model.\
+ \
+To determine if the updated model is significantly better than our additive model (additive.mod2) as well as the full interactive model (interact.mod2), we will perform two extra sum of squares (ESS) tests. This can be accomplished by running a standard anova between the two models and our current best model.
+
+
+
+
+
+
